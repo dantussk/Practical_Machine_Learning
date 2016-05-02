@@ -1,0 +1,108 @@
+---
+title: "PML_Project"
+author: "SD"
+date: "Sunday, May 01, 2016"
+output: html_document
+---
+
+INTRODUCTION
+
+This goal of the project is to predict the manner in which an exercise was based on the data collected using smart devices that track the activity of 6 users.
+
+DATA PROCESSING
+
+Preparing the packages and libraries
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+
+Loading the data
+```{r}
+setwd("~/Coursera/Data_Science_Specialization/Practical_Machine_Learning/Assignment")
+
+trainfile <- read.csv("./pml-training.csv")
+dim(trainfile)
+testfile  <- read.csv("./pml-testing.csv")
+dim(testfile)
+```
+
+Removing columns which contain only missing values
+```{r}
+trainfile <- trainfile[, colSums(is.na(trainfile)) == 0] 
+testfile <- testfile[, colSums(is.na(testfile)) == 0]
+```
+
+Removing unwanted columns such as the timestamps
+```{r}
+learn <- trainfile$classe
+
+trainfile <- trainfile[, !grepl("^X|timestamp|window", names(trainfile))]
+trainClean <- trainfile[, sapply(trainfile, is.numeric)]
+
+trainClean$classe <- learn
+dim(trainClean)
+
+testfile <- testfile[, !grepl("^X|timestamp|window", names(testfile))]
+testClean <- testfile[, sapply(testfile, is.numeric)]
+dim(testClean)
+```
+The new dimensions of the cleaned training data are 19622 rows and 53 columns
+The new dimensions of the cleaned test data are 20 rows and 53 columns
+
+Creation of the training (70% of the file) and validation (30% of the file) data files
+```{r}
+set.seed(1234) 
+partition <- createDataPartition(trainClean$classe, p=0.70, list=F)
+DataTrain <- trainClean[partition, ]
+DataValidation <- trainClean[-partition, ]
+```
+
+Plotting the correlation of the input variables in the training set
+```{r}
+Correlation <- cor(DataTrain[, -length(names(DataTrain))])
+corrplot(Correlation, method="color")
+```
+
+DATA MODELING
+
+Training a Random Forest model on the training data. A 5-fold cross-validation is applied.
+```{r}
+ConRF <- trainControl(method="cv", 5)
+trainRF <- train(classe ~ ., data=DataTrain, method="rf", trControl = ConRF, ntree=250)
+trainRF
+```
+
+Plotting the decision tree
+```{r}
+RFModel <- rpart(classe ~ ., data=DataTrain, method="class")
+prp(RFModel)
+```
+
+Applying the model to the cross-validation dataset
+```{r}
+ValidationRF <- predict(trainRF, DataValidation)
+```
+
+Creating the confusion matrix for the cross-validation dataset
+```{r}
+confusionMatrix(DataValidation$classe, ValidationRF)
+
+Accuracy <- postResample(ValidationRF, DataValidation$classe)
+Accuracy
+
+OOSError <- 1 - as.numeric(confusionMatrix(DataValidation$classe, ValidationRF)$overall[1])
+OOSError
+```
+The Accuracy for the model on the cross-validation dataset is `r Accuracy[1]` and the Out-of-Sample Error is `r OOSError`
+
+FINAL PREDICTION
+
+Predicting the classe for the test data using the model used above.
+```{r}
+TestPrediction <- predict(trainRF, testClean[, -length(names(testClean))])
+TestPrediction
+```
